@@ -34,15 +34,13 @@ define([
 									return;
 								}
 
-								const sourcePath = nodePath.node.value;
-								if (sourcePath.indexOf("!") < 0) {
-									// If sourcePath is relative (ex: "./foo"), it"s relative to currentFile.
-									var currentFile = state.file.opts.sourceFileName;
+								var sourcePath = nodePath.node.value;
+								if (!/!/.test(sourcePath)) {
+									// If sourcePath is relative (ex: "./foo"), it"s relative to sourceFileName.
+									var currentDir = state.file.opts.sourceFileName.replace(/[^/]*$/, "");
 									var absSourcePath = /^\.?\.\//.test(sourcePath) ?
-										currentFile.replace(/[^/]*$/, "") + sourcePath : sourcePath;
-									var modulePath = "es6!" + absSourcePath;
-
-									nodePath.replaceWith(state.types.stringLiteral(modulePath));
+										currentDir + sourcePath : sourcePath;
+									nodePath.replaceWith(state.types.stringLiteral("es6!" + absSourcePath));
 									nodePath.node.pathResolved = true;
 								}
 							}
