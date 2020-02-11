@@ -1,11 +1,11 @@
 define([
 //>>excludeStart('excludeBabel', pragmas.excludeBabel)
-    'babel', 'babel-plugin-module-resolver',
+    'babel',
     'module'
 //>>excludeEnd('excludeBabel')
 ], function(
 //>>excludeStart('excludeBabel', pragmas.excludeBabel)
-    babel, moduleResolver,
+    babel,
     _module
 //>>excludeEnd('excludeBabel')
     ) {
@@ -35,7 +35,37 @@ define([
             };
         }
 
-        babel.registerPlugin('module-resolver', moduleResolver);
+    const replaceImportPathPlugin = {
+        'ImportDeclaration': function replaceImportPathPlugin (path, state) {
+            var currentFile = state.file.opts.sourceFileName;
+            const node = path.node,
+                pathText = node && node.source.value;
+            if (pathText && !/!/.test(pathText)) {
+                // If path is relative (ex: "./foo"), it's relative to currentFile.
+                var adjustedPathText = /^\.?\.\//.test(pathText) ? currentFile.replace(/[^/]*$/, "") + pathText :
+                    pathText;
+                node.source.value = "es6!" + adjustedPathText;
+            }
+        }
+    };
+
+
+
+        babel.registerPlugin('module-resolver', function replaceImportPath ({types: t}) {
+            return {
+                name: 'replace-import-path',
+                visitor: {
+                    Program: {
+                        enter: function (programPath, state) {
+                            programPath.traverse(replaceImportPathPlugin, state);
+                        },
+                        exit: function (programPath, state) {
+                            programPath.traverse(replaceImportPathPlugin, state);
+                        }
+                    }
+                }
+            };
+        });
 
         function resolvePath (sourcePath, currentFile) {
             if (sourcePath.indexOf('!') < 0) {
