@@ -1,183 +1,166 @@
 define([
 //>>excludeStart('excludeBabel', pragmas.excludeBabel)
-    'babel',
-    'module'
+	'babel',
+	'module'
 //>>excludeEnd('excludeBabel')
-], function(
+], function (
 //>>excludeStart('excludeBabel', pragmas.excludeBabel)
-    babel,
-    _module
+babel,
+_module
 //>>excludeEnd('excludeBabel')
-    ) {
+) {
 //>>excludeStart('excludeBabel', pragmas.excludeBabel)
-        var fetchText, _buildMap = {};
+	var fetchText, _buildMap = {};
 
-        if (typeof window !== 'undefined' && window.navigator && window.document) {
-            fetchText = function (url, callback) {
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', url, true);
-                xhr.onreadystatechange = function (evt) {
-                    //Do not explicitly handle errors, those should be
-                    //visible via console output in the browser.
-                    if (xhr.readyState === 4) {
-                        callback(xhr.responseText);
-                    }
-                };
-                xhr.send(null);
-            };
-        } else if (typeof process !== 'undefined' &&
-                   process.versions &&
-                   !!process.versions.node) {
-            //Using special require.nodeRequire, something added by r.js.
-            var fs = require.nodeRequire('fs');
-            fetchText = function (path, callback) {
-                callback(fs.readFileSync(path, 'utf8'));
-            };
-        }
+	if (typeof window !== 'undefined' && window.navigator && window.document) {
+		fetchText = function (url, callback) {
+			var xhr = new XMLHttpRequest();
+			xhr.open('GET', url, true);
+			xhr.onreadystatechange = function (evt) {
+				//Do not explicitly handle errors, those should be
+				//visible via console output in the browser.
+				if (xhr.readyState === 4) {
+					callback(xhr.responseText);
+				}
+			};
+			xhr.send(null);
+		};
+	} else if (typeof process !== 'undefined' &&
+		process.versions &&
+		!!process.versions.node) {
+		//Using special require.nodeRequire, something added by r.js.
+		var fs = require.nodeRequire('fs');
+		fetchText = function (path, callback) {
+			callback(fs.readFileSync(path, 'utf8'));
+		};
+	}
 
-    function resolvePath (nodePath, state) {
-        if (!state.types.isStringLiteral(nodePath)) {
-            return;
-        }
+	function resolvePath(nodePath, state) {
+		if (!state.types.isStringLiteral(nodePath)) {
+			return;
+		}
 
-        const sourcePath = nodePath.node.value;
-        const currentFile = state.file.opts.sourceFileName;
+		const sourcePath = nodePath.node.value;
+		const currentFile = state.file.opts.sourceFileName;
 
-        const modulePath = myResolvePath(sourcePath, currentFile, state.opts);
-        if (modulePath) {
-            if (nodePath.node.pathResolved) {
-                return;
-            }
+		const modulePath = myResolvePath(sourcePath, currentFile, state.opts);
+		if (modulePath) {
+			if (nodePath.node.pathResolved) {
+				return;
+			}
 
-            nodePath.replaceWith(state.types.stringLiteral(modulePath));
-            nodePath.node.pathResolved = true;
-        }
-    }
+			nodePath.replaceWith(state.types.stringLiteral(modulePath));
+			nodePath.node.pathResolved = true;
+		}
+	}
 
-    function isImportCall (types, calleePath) {
-        return types.isImport(calleePath.node.callee);
-    }
 
-    function transformCall (nodePath, state) {
-        if (state.moduleResolverVisited[nodePath]) {
-            return;
-        }
+	const importVisitors = {
+		'ImportDeclaration|ExportDeclaration': function transformImport(nodePath, state) {
+			if (state.moduleResolverVisited[nodePath]) {
+				return;
+			}
+			state.moduleResolverVisited[nodePath] = true;
 
-        if (isImportCall(state.types, nodePath)) {
-            state.moduleResolverVisited[nodePath] = true;
-            resolvePath(nodePath.get('arguments.0'), state);
-        }
-    }
+			resolvePath(nodePath.get('source'), state);
+		}
+	};
 
-    function transformImport (nodePath, state) {
-        if (state.moduleResolverVisited[nodePath]) {
-            return;
-        }
-        state.moduleResolverVisited[nodePath] = true;
+	babel.registerPlugin('module-resolver', function moduleResolver(args) {
+		var types = args.types;
+		return {
+			name: 'module-resolver',
 
-        resolvePath(nodePath.get('source'), state);
-    }
+			pre: function () {
+				this.types = types;
+				this.moduleResolverVisited = {};
+			},
 
-    const importVisitors = {
-        CallExpression: transformCall,
-        'ImportDeclaration|ExportDeclaration': transformImport
-    };
+			visitor: {
+				Program: {
+					enter: function (programPath, state) {
+						programPath.traverse(importVisitors, state);
+					},
+					exit: function (programPath, state) {
+						programPath.traverse(importVisitors, state);
+					}
+				}
+			},
 
-        babel.registerPlugin('module-resolver', function moduleResolver (args) {
-            var types = args.types;
-            return {
-                name: 'module-resolver',
+			post: function () {
+				this.moduleResolverVisited = null;
+			}
+		}
+	});
 
-                pre: function () {
-                    this.types = types;
-                    this.moduleResolverVisited = {};
-                },
+	function myResolvePath(sourcePath, currentFile) {
+		if (sourcePath.indexOf('!') < 0) {
+			// If sourcePath is relative (ex: "./foo"), it's relative to currentFile.
+			var absSourcePath = /^\.?\.\//.test(sourcePath) ? currentFile.replace(/[^/]*$/, "") + sourcePath :
+				sourcePath;
+			return 'es6!' + absSourcePath;
+		}
+	}
 
-                visitor: {
-                    Program: {
-                        enter: function (programPath, state) {
-                            programPath.traverse(importVisitors, state);
-                        },
-                        exit: function (programPath, state) {
-                            programPath.traverse(importVisitors, state);
-                        }
-                    }
-                },
-
-                post: function () {
-                    this.moduleResolverVisited = null;
-                }
-            }
-        });
-
-        function myResolvePath (sourcePath, currentFile) {
-            if (sourcePath.indexOf('!') < 0) {
-                // If sourcePath is relative (ex: "./foo"), it's relative to currentFile.
-                var absSourcePath = /^\.?\.\//.test(sourcePath) ? currentFile.replace(/[^/]*$/, "") + sourcePath :
-                    sourcePath;
-                return 'es6!' + absSourcePath;
-            }
-        }
-
-        var excludedOptions = ['extraPlugins', 'resolveModuleSource'];
-        var pluginOptions = _module.config();
-        var fileExtension = pluginOptions.fileExtension || '.js';
-        var defaultOptions = {
-            plugins: (pluginOptions.extraPlugins || []).concat([
-                'transform-modules-amd',
-                [
-                    'module-resolver',
-                    {
-                        resolvePath: pluginOptions.resolveModuleSource || resolvePath
-                    }
-                ]
-            ])
-        };
-        for (var key in pluginOptions) {
-            if (pluginOptions.hasOwnProperty(key) && excludedOptions.indexOf(key) < 0) {
-                defaultOptions[key] = pluginOptions[key];
-            }
-        }
+	var excludedOptions = ['extraPlugins', 'resolveModuleSource'];
+	var pluginOptions = _module.config();
+	var fileExtension = pluginOptions.fileExtension || '.js';
+	var defaultOptions = {
+		plugins: (pluginOptions.extraPlugins || []).concat([
+			'transform-modules-amd',
+			[
+				'module-resolver',
+				{
+					resolvePath: pluginOptions.resolveModuleSource || resolvePath
+				}
+			]
+		])
+	};
+	for (var key in pluginOptions) {
+		if (pluginOptions.hasOwnProperty(key) && excludedOptions.indexOf(key) < 0) {
+			defaultOptions[key] = pluginOptions[key];
+		}
+	}
 
 //>>excludeEnd('excludeBabel')
-return {
+	return {
 //>>excludeStart('excludeBabel', pragmas.excludeBabel)
-        load: function (name, req, onload, config) {
-            var sourceFileName = /\./.test(name) ? name : name + fileExtension;
-            var url = req.toUrl(sourceFileName);
+		load: function (name, req, onload, config) {
+			var sourceFileName = /\./.test(name) ? name : name + fileExtension;
+			var url = req.toUrl(sourceFileName);
 
-            if (url.indexOf('empty:') === 0) {
-                return onload();
-            }
+			if (url.indexOf('empty:') === 0) {
+				return onload();
+			}
 
-            var options = {};
-            for (var key in defaultOptions) {
-                options[key] = defaultOptions[key];
-            }
-            options.sourceFileName = sourceFileName;
-            options.sourceMap = config.isBuild ? false : 'inline';
+			var options = {};
+			for (var key in defaultOptions) {
+				options[key] = defaultOptions[key];
+			}
+			options.sourceFileName = sourceFileName;
+			options.sourceMap = config.isBuild ? false : 'inline';
 
-            fetchText(url, function (text) {
-                var code;
-                try {
-                    code = babel.transform(text, options).code;
-                } catch (error) {
-                    return onload.error(error);
-                }
+			fetchText(url, function (text) {
+				var code;
+				try {
+					code = babel.transform(text, options).code;
+				} catch (error) {
+					return onload.error(error);
+				}
 
-                if (config.isBuild) {
-                    _buildMap[name] = code;
-                }
+				if (config.isBuild) {
+					_buildMap[name] = code;
+				}
 
-                onload.fromText(code);
-            });
-        },
+				onload.fromText(code);
+			});
+		},
 
-        write: function (pluginName, moduleName, write) {
-            if (moduleName in _buildMap) {
-                write.asModule(pluginName + '!' + moduleName, _buildMap[moduleName]);
-            }
-        }
+		write: function (pluginName, moduleName, write) {
+			if (moduleName in _buildMap) {
+				write.asModule(pluginName + '!' + moduleName, _buildMap[moduleName]);
+			}
+		}
 //>>excludeEnd('excludeBabel')
-    };
+	};
 });
