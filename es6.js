@@ -66,10 +66,10 @@ _module
 		}
 	};
 
-	babel.registerPlugin('module-resolver', function moduleResolver(args) {
+	babel.registerPlugin('apply-es6-recursively', function moduleResolver(args) {
 		var types = args.types;
 		return {
-			name: 'module-resolver',
+			name: 'apply-es6-recursively',
 
 			pre: function () {
 				this.types = types;
@@ -108,12 +108,7 @@ _module
 	var defaultOptions = {
 		plugins: (pluginOptions.extraPlugins || []).concat([
 			'transform-modules-amd',
-			[
-				'module-resolver',
-				{
-					resolvePath: pluginOptions.resolveModuleSource || resolvePath
-				}
-			]
+			'apply-es6-recursively'
 		])
 	};
 	for (var key in pluginOptions) {
