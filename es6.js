@@ -35,39 +35,82 @@ define([
             };
         }
 
-    const replaceImportPathPlugin = {
-        'ImportDeclaration': function replaceImportPathPlugin (path, state) {
-            var currentFile = state.file.opts.sourceFileName;
-            const node = path.node,
-                pathText = node && node.source.value;
-            if (pathText && !/!/.test(pathText)) {
-                // If path is relative (ex: "./foo"), it's relative to currentFile.
-                var adjustedPathText = /^\.?\.\//.test(pathText) ? currentFile.replace(/[^/]*$/, "") + pathText :
-                    pathText;
-                node.source.value = "es6!" + adjustedPathText;
-            }
+    function resolvePath (nodePath, state) {
+        if (!state.types.isStringLiteral(nodePath)) {
+            return;
         }
+
+        const sourcePath = nodePath.node.value;
+        const currentFile = state.file.opts.sourceFileName;
+
+        const modulePath = myResolvePath(sourcePath, currentFile, state.opts);
+        if (modulePath) {
+            if (nodePath.node.pathResolved) {
+                return;
+            }
+
+            nodePath.replaceWith(state.types.stringLiteral(modulePath));
+            nodePath.node.pathResolved = true;
+        }
+    }
+
+    function isImportCall (types, calleePath) {
+        return types.isImport(calleePath.node.callee);
+    }
+
+    function transformCall (nodePath, state) {
+        if (state.moduleResolverVisited[nodePath]) {
+            return;
+        }
+
+        if (isImportCall(state.types, nodePath)) {
+            state.moduleResolverVisited[nodePath] = true;
+            resolvePath(nodePath.get('arguments.0'), state);
+        }
+    }
+
+    function transformImport (nodePath, state) {
+        if (state.moduleResolverVisited[nodePath]) {
+            return;
+        }
+        state.moduleResolverVisited[nodePath] = true;
+
+        resolvePath(nodePath.get('source'), state);
+    }
+
+    const importVisitors = {
+        CallExpression: transformCall,
+        'ImportDeclaration|ExportDeclaration': transformImport
     };
 
-
-
-        babel.registerPlugin('module-resolver', function replaceImportPath ({types: t}) {
+        babel.registerPlugin('module-resolver', function moduleResolver (args) {
+            var types = args.types;
             return {
-                name: 'replace-import-path',
+                name: 'module-resolver',
+
+                pre: function () {
+                    this.types = types;
+                    this.moduleResolverVisited = {};
+                },
+
                 visitor: {
                     Program: {
                         enter: function (programPath, state) {
-                            programPath.traverse(replaceImportPathPlugin, state);
+                            programPath.traverse(importVisitors, state);
                         },
                         exit: function (programPath, state) {
-                            programPath.traverse(replaceImportPathPlugin, state);
+                            programPath.traverse(importVisitors, state);
                         }
                     }
+                },
+
+                post: function () {
+                    this.moduleResolverVisited = null;
                 }
-            };
+            }
         });
 
-        function resolvePath (sourcePath, currentFile) {
+        function myResolvePath (sourcePath, currentFile) {
             if (sourcePath.indexOf('!') < 0) {
                 // If sourcePath is relative (ex: "./foo"), it's relative to currentFile.
                 var absSourcePath = /^\.?\.\//.test(sourcePath) ? currentFile.replace(/[^/]*$/, "") + sourcePath :
@@ -75,6 +118,7 @@ define([
                 return 'es6!' + absSourcePath;
             }
         }
+
         var excludedOptions = ['extraPlugins', 'resolveModuleSource'];
         var pluginOptions = _module.config();
         var fileExtension = pluginOptions.fileExtension || '.js';
