@@ -41,66 +41,54 @@ _module
 		}
 
 		const sourcePath = nodePath.node.value;
-		const currentFile = state.file.opts.sourceFileName;
-
-		const modulePath = myResolvePath(sourcePath, currentFile, state.opts);
-		if (modulePath) {
-			if (nodePath.node.pathResolved) {
-				return;
-			}
+		if (sourcePath.indexOf('!') < 0) {
+			// If sourcePath is relative (ex: "./foo"), it's relative to currentFile.
+			const currentFile = state.file.opts.sourceFileName;
+			var absSourcePath = /^\.?\.\//.test(sourcePath) ? currentFile.replace(/[^/]*$/, "") + sourcePath :
+				sourcePath;
+			const modulePath = 'es6!' + absSourcePath;
 
 			nodePath.replaceWith(state.types.stringLiteral(modulePath));
 			nodePath.node.pathResolved = true;
 		}
 	}
 
-
-	const importVisitors = {
-		'ImportDeclaration|ExportDeclaration': function transformImport(nodePath, state) {
-			if (state.moduleResolverVisited[nodePath]) {
-				return;
-			}
-			state.moduleResolverVisited[nodePath] = true;
-
-			resolvePath(nodePath.get('source'), state);
-		}
-	};
-
 	babel.registerPlugin('apply-es6-recursively', function moduleResolver(args) {
-		var types = args.types;
 		return {
 			name: 'apply-es6-recursively',
 
 			pre: function () {
-				this.types = types;
-				this.moduleResolverVisited = {};
+				this.types = args.types;
 			},
 
 			visitor: {
 				Program: {
 					enter: function (programPath, state) {
-						programPath.traverse(importVisitors, state);
-					},
-					exit: function (programPath, state) {
-						programPath.traverse(importVisitors, state);
+						programPath.traverse({
+							'ImportDeclaration|ExportDeclaration': function (nodePath, state) {
+								var nodePath = nodePath.get('source');
+								if (!state.types.isStringLiteral(nodePath)) {
+									return;
+								}
+
+								const sourcePath = nodePath.node.value;
+								if (sourcePath.indexOf('!') < 0) {
+									// If sourcePath is relative (ex: "./foo"), it's relative to currentFile.
+									var currentFile = state.file.opts.sourceFileName;
+									var absSourcePath = /^\.?\.\//.test(sourcePath) ?
+										currentFile.replace(/[^/]*$/, "") + sourcePath : sourcePath;
+									var modulePath = 'es6!' + absSourcePath;
+
+									nodePath.replaceWith(state.types.stringLiteral(modulePath));
+									nodePath.node.pathResolved = true;
+								}
+							}
+						}, state);
 					}
 				}
-			},
-
-			post: function () {
-				this.moduleResolverVisited = null;
 			}
 		}
 	});
-
-	function myResolvePath(sourcePath, currentFile) {
-		if (sourcePath.indexOf('!') < 0) {
-			// If sourcePath is relative (ex: "./foo"), it's relative to currentFile.
-			var absSourcePath = /^\.?\.\//.test(sourcePath) ? currentFile.replace(/[^/]*$/, "") + sourcePath :
-				sourcePath;
-			return 'es6!' + absSourcePath;
-		}
-	}
 
 	var excludedOptions = ['extraPlugins', 'resolveModuleSource'];
 	var pluginOptions = _module.config();
