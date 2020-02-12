@@ -8,10 +8,12 @@
     Open console tab in dev tools!
 
     <script src="../node_modules/@babel/polyfill/dist/polyfill.js"></script>
+    <script src="../node_modules/@webcomponents/template/template.js"></script>
 
     <script src="../node_modules/requirejs/require.js"></script>
     <script>
         requirejs.config({
+            waitSeconds : 60,
             config: {
                 es6: {
                     presets: ['es2015']

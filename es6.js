@@ -65,8 +65,7 @@ define([
 				sourceMap: "inline",
 				plugins: [
 					"transform-modules-amd",
-					"apply-es6-recursively",
-					"external-helpers"
+					"apply-es6-recursively"
 				],
 				presets: ["es2015"]
 			};
