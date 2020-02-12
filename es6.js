@@ -65,8 +65,10 @@ define([
 				sourceMap: "inline",
 				plugins: [
 					"transform-modules-amd",
-					"apply-es6-recursively"
-				]
+					"apply-es6-recursively",
+					"external-helpers"
+				],
+				presets: ["es2015"]
 			};
 
 			fetchText(url, function (text) {
